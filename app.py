@@ -3,8 +3,19 @@ import yfinance as yf
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
+import time
 
 st.set_page_config(page_title="Stock Prediction App", layout="wide")
+
+# Cache the stock data to avoid rate limiting
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_stock_data(symbol, start_date="2020-01-01"):
+    """Fetch stock data with caching"""
+    try:
+        data = yf.download(symbol, start=start_date, progress=False)
+        return data
+    except Exception as e:
+        return None
 
 # Custom CSS for colorful design
 st.markdown("""
@@ -37,9 +48,10 @@ with col1:
 
 if stock:
     try:
-        data = yf.download(stock, start="2020-01-01", progress=False)
+        with st.spinner(f"⏳ Loading data for {stock}..."):
+            data = get_stock_data(stock)
         
-        if data.empty:
+        if data is None or data.empty:
             st.error(f"❌ No data found for '{stock}'. Check the symbol and try again.")
         else:
             # Get stock info
@@ -150,4 +162,9 @@ if stock:
                 st.dataframe(data.tail(20), use_container_width=True)
     
     except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
+        error_msg = str(e)
+        if "429" in error_msg or "rate" in error_msg.lower():
+            st.error("⏱️ **Rate Limited!** Too many requests. Please wait a moment and try again.")
+            st.info("💡 **Tip:** Data is cached for 1 hour, so refresh the page if you already searched this stock.")
+        else:
+            st.error(f"❌ Error: {error_msg}")
